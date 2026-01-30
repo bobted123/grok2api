@@ -21,7 +21,7 @@
 
 手动部署与更完整的说明请查看：`README.cloudflare.md`
 
-基于 **FastAPI** 重构的 Grok2API，全面适配最新 Web 调用格式，支持流式对话、图像生成、图像编辑、联网搜索、深度思考，号池并发与自动负载均衡一体化。
+面向 Cloudflare Workers 的 Grok2API，全面适配最新 Web 调用格式，支持流式对话、图像生成、图像编辑、联网搜索、深度思考，号池并发与自动负载均衡一体化。
 
 ## 🆕 Fork 增强功能
 
@@ -52,12 +52,12 @@
 
 - 在对话内容中输入如“给我画一个月亮”自动触发图片生成
 - 每次以 **Markdown 格式返回两张图片**，共消耗 4 次额度
-- **注意：Grok 的图片直链受 403 限制，系统自动缓存图片到本地。必须正确设置 `Base Url` 以确保图片能正常显示！**
+- **注意：Grok 的图片直链受 403 限制，系统自动缓存图片到 KV。必须正确设置 `Base Url` 以确保图片能正常显示！**
 
 ### 视频生成功能
 - 选择 `grok-imagine-0.9` 模型，传入图片和提示词即可（方式和 OpenAI 的图片分析调用格式一致）
 - 返回格式为 `<video src="{full_video_url}" controls="controls"></video>`
-- **注意：Grok 的视频直链受 403 限制，系统自动缓存图片到本地。必须正确设置 `Base Url` 以确保视频能正常显示！**
+- **注意：Grok 的视频直链受 403 限制，系统自动缓存视频到 KV。必须正确设置 `Base Url` 以确保视频能正常显示！**
 
 ```
 curl https://你的服务器地址/v1/chat/completions \
@@ -90,80 +90,6 @@ curl https://你的服务器地址/v1/chat/completions \
 - `x_statsig_id` 是 Grok 用于反机器人的 Token，有逆向资料可参考
 - **建议新手勿修改配置，保留默认值即可**
 - 尝试用 Camoufox 绕过 403 自动获 id，但 grok 现已限制非登陆的`x_statsig_id`，故弃用，采用固定值以兼容所有请求
-
-<br>
-
-## 如何部署
-
-### 方式一：Docker Compose（推荐）
-
-由于本项目包含修改，建议直接构建运行：
-
-1. 克隆本仓库
-```bash
-git clone https://github.com/Tomiya233/grok2api.git
-cd grok2api
-```
-
-2. 启动服务
-```bash
-docker-compose up -d --build
-```
-
-**docker-compose.yml 参考：**
-```yaml
-services:
-  grok2api:
-    build: .
-    image: grok2api:latest
-    container_name: grok2api
-    restart: always
-    ports:
-      - "8000:8000"
-    volumes:
-      - grok_data:/app/data
-      - ./logs:/app/logs
-    environment:
-      - LOG_LEVEL=INFO
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
-
-volumes:
-  grok_data:
-```
-
-### 方式二：Python 直接运行
-
-**前置要求**：Python 3.10+，建议使用 `uv` 包管理器
-
-1. 安装 uv
-```bash
-curl -LsSf https://astral.sh/uv/install.sh | sh
-```
-
-2. 运行服务
-```bash
-# 安装依赖并运行
-uv sync
-uv run python main.py
-```
-
-服务默认运行在 `http://127.0.0.1:8000`
-
-### 环境变量说明
-
-| 环境变量      | 必填 | 说明                                    | 示例 |
-|---------------|------|-----------------------------------------|------|
-| STORAGE_MODE  | 否   | 存储模式：file/mysql/redis               | file |
-| DATABASE_URL  | 否   | 数据库连接URL（MySQL/Redis模式时必需）   | mysql://user:pass@host:3306/db |
-
-**存储模式：**
-- `file`: 本地文件存储（默认）
-- `mysql`: MySQL数据库存储，需设置DATABASE_URL
-- `redis`: Redis缓存存储，需设置DATABASE_URL
 
 <br>
 
@@ -240,13 +166,8 @@ uv run python main.py
 |----------------------------|---------|------|-----------------------------------------|--------|
 | admin_username             | global  | 否   | 管理后台登录用户名                      | "admin"|
 | admin_password             | global  | 否   | 管理后台登录密码                        | "admin"|
-| log_level                  | global  | 否   | 日志级别：DEBUG/INFO/...                | "INFO" |
-| image_mode                 | global  | 否   | 图片返回模式：url/base64                | "url"  |
-| image_cache_max_size_mb    | global  | 否   | 图片缓存最大容量(MB)                     | 512    |
-| video_cache_max_size_mb    | global  | 否   | 视频缓存最大容量(MB)                     | 1024   |
 | base_url                   | global  | 否   | 服务基础URL/图片访问基准                 | ""     |
 | api_key                    | grok    | 否   | API 密钥（可选加强安全）                | ""     |
-| proxy_url                  | grok    | 否   | HTTP代理服务器地址                      | ""     |
 | stream_chunk_timeout       | grok    | 否   | 流式分块超时时间(秒)                     | 120    |
 | stream_first_response_timeout | grok | 否   | 流式首次响应超时时间(秒)                 | 30     |
 | stream_total_timeout       | grok    | 否   | 流式总超时时间(秒)                       | 600    |

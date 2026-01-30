@@ -20,24 +20,32 @@ export async function addRequestLog(
   entry: Omit<RequestLogRow, "id" | "time" | "timestamp"> & { id?: string },
 ): Promise<void> {
   const ts = nowMs();
-  const id = entry.id ?? String(ts);
+  const id = entry.id ?? crypto.randomUUID();
   const time = formatUtcMs(ts);
-  await dbRun(
-    db,
-    "INSERT INTO request_logs(id,time,timestamp,ip,model,duration,status,key_name,token_suffix,error) VALUES(?,?,?,?,?,?,?,?,?,?)",
-    [
-      id,
-      time,
-      ts,
-      entry.ip,
-      entry.model,
-      entry.duration,
-      entry.status,
-      entry.key_name,
-      entry.token_suffix,
-      entry.error,
-    ],
-  );
+  try {
+    await dbRun(
+      db,
+      "INSERT INTO request_logs (id, time, timestamp, ip, model, duration, status, key_name, token_suffix, error) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      [
+        id,
+        time,
+        ts,
+        entry.ip,
+        entry.model,
+        entry.duration,
+        entry.status,
+        entry.key_name,
+        entry.token_suffix,
+        entry.error,
+      ],
+    );
+  } catch (error) {
+    const message = String(error).toLowerCase();
+    if (message.includes("request_logs.id") && (message.includes("unique") || message.includes("primary key") || message.includes("constraint"))) {
+      return;
+    }
+    throw error;
+  }
 }
 
 export async function getRequestLogs(db: Env["DB"], limit = 1000): Promise<RequestLogRow[]> {

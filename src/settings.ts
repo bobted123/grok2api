@@ -14,10 +14,6 @@ export interface GlobalSettings {
 
 export interface GrokSettings {
   api_key?: string;
-  proxy_url?: string;
-  proxy_pool_url?: string;
-  proxy_pool_interval?: number;
-  cache_proxy_url?: string;
   cf_clearance?: string; // stored as VALUE only (no "cf_clearance=" prefix)
   x_statsig_id?: string;
   dynamic_statsig?: boolean;
@@ -47,10 +43,6 @@ const DEFAULTS: SettingsBundle = {
   },
   grok: {
     api_key: "",
-    proxy_url: "",
-    proxy_pool_url: "",
-    proxy_pool_interval: 300,
-    cache_proxy_url: "",
     cf_clearance: "",
     x_statsig_id: "",
     dynamic_statsig: true,
@@ -133,4 +125,3 @@ export async function saveSettings(
     ["grok", JSON.stringify(nextGrok), now],
   );
 }
-
