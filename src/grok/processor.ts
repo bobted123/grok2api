@@ -60,6 +60,17 @@ function base64UrlEncode(input: string): string {
   return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
 }
 
+async function warmupCache(url: string, cookie: string): Promise<void> {
+  try {
+    await fetch(url, {
+      method: "HEAD",
+      headers: { Cookie: cookie },
+    });
+  } catch {
+    // 忽略预热失败
+  }
+}
+
 function encodeAssetPath(raw: string): string {
   try {
     const u = new URL(raw);
@@ -231,6 +242,8 @@ export function createOpenAiStreamFromGrokNdjson(
                 const videoPath = encodeAssetPath(videoUrl);
                 const src = toImgProxyUrl(global, origin, videoPath);
                 controller.enqueue(encoder.encode(makeChunk(id, created, currentModel, buildVideoTag(src))));
+                // 预热缓存：主动访问视频URL触发缓存写入
+                warmupCache(src, opts.cookie).catch(() => {});
               }
               continue;
             }
@@ -249,6 +262,8 @@ export function createOpenAiStreamFromGrokNdjson(
                     const imgPath = encodeAssetPath(u);
                     const imgUrl = toImgProxyUrl(global, origin, imgPath);
                     linesOut.push(imgUrl);
+                    // 预热缓存：主动访问图片URL触发缓存写入
+                    warmupCache(imgUrl, opts.cookie).catch(() => {});
                   }
                   controller.enqueue(
                     encoder.encode(makeChunk(id, created, currentModel, linesOut.join("\n"), "stop")),
@@ -370,6 +385,8 @@ export async function parseOpenAiFromGrokNdjson(
       const src = toImgProxyUrl(global, origin, videoPath);
       content = buildVideoTag(src);
       model = requestedModel;
+      // 预热缓存：主动访问视频URL触发缓存写入
+      warmupCache(src, opts.cookie).catch(() => {});
       break;
     }
 
@@ -386,6 +403,8 @@ export async function parseOpenAiFromGrokNdjson(
       const imgPath = encodeAssetPath(u);
       const imgUrl = toImgProxyUrl(global, origin, imgPath);
       content += `\n${imgUrl}`;
+      // 预热缓存：主动访问图片URL触发缓存写入
+      warmupCache(imgUrl, opts.cookie).catch(() => {});
     }
     break;
   }
