@@ -248,7 +248,7 @@ export function createOpenAiStreamFromGrokNdjson(
                     if (typeof u !== "string") continue;
                     const imgPath = encodeAssetPath(u);
                     const imgUrl = toImgProxyUrl(global, origin, imgPath);
-                    linesOut.push(`![Generated Image](${imgUrl})`);
+                    linesOut.push(imgUrl);
                   }
                   controller.enqueue(
                     encoder.encode(makeChunk(id, created, currentModel, linesOut.join("\n"), "stop")),
@@ -258,7 +258,8 @@ export function createOpenAiStreamFromGrokNdjson(
                   controller.close();
                   return;
                 }
-              } else if (typeof rawToken === "string" && rawToken) {
+              } else if (typeof rawToken === "string" && rawToken && !isImage) {
+                // 图像生成模式下跳过描述性文字，只返回图片
                 controller.enqueue(encoder.encode(makeChunk(id, created, currentModel, rawToken)));
               }
               continue;
@@ -384,7 +385,7 @@ export async function parseOpenAiFromGrokNdjson(
       if (typeof u !== "string") continue;
       const imgPath = encodeAssetPath(u);
       const imgUrl = toImgProxyUrl(global, origin, imgPath);
-      content += `\n![Generated Image](${imgUrl})`;
+      content += `\n${imgUrl}`;
     }
     break;
   }
