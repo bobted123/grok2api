@@ -1537,9 +1537,8 @@
         showToast('已有刷新任务在进行中', 'error');
         return;
       }
-      if (!confirm('确定要刷新所有Token的剩余次数吗？这可能需要一段时间...')) return;
       if (!allTokens || allTokens.length === 0) {
-        showToast('没有Token需要刷新，请先刷新列表', 'error');
+        showToast('没有Token需要刷新', 'error');
         return;
       }
 
