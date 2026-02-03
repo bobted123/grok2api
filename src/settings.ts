@@ -23,6 +23,8 @@ export interface GrokSettings {
   stream_first_response_timeout?: number;
   stream_chunk_timeout?: number;
   stream_total_timeout?: number;
+  max_retry?: number;
+  retry_codes?: number[];
   retry_status_codes?: number[];
 }
 
@@ -31,29 +33,30 @@ export interface SettingsBundle {
   grok: Required<GrokSettings>;
 }
 
-const DEFAULTS: SettingsBundle = {
-  global: {
-    base_url: "",
-    log_level: "INFO",
-    image_mode: "url",
-    admin_username: "admin",
-    admin_password: "admin",
-    image_cache_max_size_mb: 512,
-    video_cache_max_size_mb: 1024,
-  },
-  grok: {
-    api_key: "",
-    cf_clearance: "",
-    x_statsig_id: "",
-    dynamic_statsig: true,
-    filtered_tags: "xaiartifact,xai:tool_usage_card",
-    show_thinking: true,
-    temporary: false,
-    stream_first_response_timeout: 30,
-    stream_chunk_timeout: 120,
-    stream_total_timeout: 600,
-    retry_status_codes: [401, 429],
-  },
+export const DEFAULT_GLOBAL_SETTINGS: Required<GlobalSettings> = {
+  base_url: "",
+  log_level: "INFO",
+  image_mode: "url",
+  admin_username: "admin",
+  admin_password: "admin",
+  image_cache_max_size_mb: 512,
+  video_cache_max_size_mb: 1024,
+};
+
+export const DEFAULT_GROK_SETTINGS: Required<GrokSettings> = {
+  api_key: "",
+  cf_clearance: "",
+  x_statsig_id: "",
+  dynamic_statsig: true,
+  filtered_tags: "xaiartifact,xai:tool_usage_card",
+  show_thinking: true,
+  temporary: false,
+  stream_first_response_timeout: 30,
+  stream_chunk_timeout: 120,
+  stream_total_timeout: 600,
+  max_retry: 3,
+  retry_codes: [401, 429, 403],
+  retry_status_codes: [401, 429, 403],
 };
 
 function safeParseJson<T>(raw: string, fallback: T): T {
@@ -70,9 +73,70 @@ function stripCfPrefix(value: string): string {
   return trimmed.startsWith("cf_clearance=") ? trimmed.slice("cf_clearance=".length) : trimmed;
 }
 
+type PlainObject = Record<string, unknown>;
+
+function isPlainObject(value: unknown): value is PlainObject {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function cloneValue<T>(value: T): T {
+  if (Array.isArray(value)) {
+    return value.map((item) => cloneValue(item)) as T;
+  }
+  if (isPlainObject(value)) {
+    const result: PlainObject = {};
+    for (const [key, val] of Object.entries(value)) {
+      result[key] = cloneValue(val);
+    }
+    return result as T;
+  }
+  return value;
+}
+
+export function deepMerge<T>(base: T, override: unknown): T {
+  if (!isPlainObject(base)) {
+    return isPlainObject(override) ? (cloneValue(override) as T) : cloneValue(base);
+  }
+
+  const result = cloneValue(base) as PlainObject;
+  if (!isPlainObject(override)) {
+    return result as T;
+  }
+
+  for (const [key, val] of Object.entries(override)) {
+    const existing = result[key];
+    if (isPlainObject(val) && isPlainObject(existing)) {
+      result[key] = deepMerge(existing, val);
+    } else {
+      result[key] = cloneValue(val);
+    }
+  }
+
+  return result as T;
+}
+
 export function normalizeCfCookie(value: string): string {
   const cleaned = stripCfPrefix(value);
   return cleaned ? `cf_clearance=${cleaned}` : "";
+}
+
+export function loadGlobalSettings(raw?: string): Required<GlobalSettings> {
+  const parsed = raw ? safeParseJson<GlobalSettings>(raw, {}) : {};
+  return deepMerge(DEFAULT_GLOBAL_SETTINGS, parsed);
+}
+
+export function loadGrokSettings(raw?: string): Required<GrokSettings> {
+  const parsed = raw ? safeParseJson<GrokSettings>(raw, {}) : {};
+  const merged = deepMerge(DEFAULT_GROK_SETTINGS, parsed);
+  const parsedRetryCodes = Array.isArray(parsed.retry_codes);
+  const parsedRetryStatusCodes = Array.isArray(parsed.retry_status_codes);
+  const retryCodes = !parsedRetryCodes && parsedRetryStatusCodes ? merged.retry_status_codes : merged.retry_codes;
+  return {
+    ...merged,
+    retry_codes: retryCodes,
+    retry_status_codes: retryCodes,
+    cf_clearance: stripCfPrefix(merged.cf_clearance ?? ""),
+  };
 }
 
 export async function getSettings(env: Env): Promise<SettingsBundle> {
@@ -87,16 +151,9 @@ export async function getSettings(env: Env): Promise<SettingsBundle> {
     ["grok"],
   );
 
-  const globalCfg = globalRow?.value
-    ? safeParseJson<GlobalSettings>(globalRow.value, DEFAULTS.global)
-    : DEFAULTS.global;
-  const grokCfg = grokRow?.value
-    ? safeParseJson<GrokSettings>(grokRow.value, DEFAULTS.grok)
-    : DEFAULTS.grok;
-
   return {
-    global: { ...DEFAULTS.global, ...globalCfg },
-    grok: { ...DEFAULTS.grok, ...grokCfg, cf_clearance: stripCfPrefix(grokCfg.cf_clearance ?? "") },
+    global: loadGlobalSettings(globalRow?.value),
+    grok: loadGrokSettings(grokRow?.value),
   };
 }
 
@@ -113,6 +170,13 @@ export async function saveSettings(
     ...(updates.grok_config ?? {}),
     cf_clearance: stripCfPrefix(updates.grok_config?.cf_clearance ?? current.grok.cf_clearance ?? ""),
   };
+  const retryCodes = Array.isArray(nextGrok.retry_codes)
+    ? nextGrok.retry_codes
+    : Array.isArray(nextGrok.retry_status_codes)
+      ? nextGrok.retry_status_codes
+      : DEFAULT_GROK_SETTINGS.retry_codes;
+  nextGrok.retry_codes = retryCodes;
+  nextGrok.retry_status_codes = retryCodes;
 
   await dbRun(
     env.DB,
