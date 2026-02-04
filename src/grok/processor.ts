@@ -53,6 +53,26 @@ function buildVideoTag(src: string): string {
   return `<video src="${src}" controls="controls" width="500" height="300"></video>\n`;
 }
 
+function buildVideoPosterPreview(videoUrl: string, posterUrl?: string): string {
+  const href = String(videoUrl || "").replace(/"/g, "&quot;");
+  const poster = String(posterUrl || "").replace(/"/g, "&quot;");
+  if (!href) return "";
+  if (!poster) return `<a href="${href}" target="_blank" rel="noopener noreferrer">${href}</a>\n`;
+  return `<a href="${href}" target="_blank" rel="noopener noreferrer" style="display:inline-block;position:relative;max-width:100%;text-decoration:none;">
+  <img src="${poster}" alt="video" style="max-width:100%;height:auto;border-radius:12px;display:block;" />
+  <span style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;">
+    <span style="width:64px;height:64px;border-radius:9999px;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;">
+      <span style="width:0;height:0;border-top:12px solid transparent;border-bottom:12px solid transparent;border-left:18px solid #fff;margin-left:4px;"></span>
+    </span>
+  </span>
+</a>\n`;
+}
+
+function buildVideoHtml(args: { videoUrl: string; posterUrl?: string; posterPreview: boolean }): string {
+  if (args.posterPreview) return buildVideoPosterPreview(args.videoUrl, args.posterUrl);
+  return buildVideoTag(args.videoUrl);
+}
+
 function base64UrlEncode(input: string): string {
   const bytes = new TextEncoder().encode(input);
   let binary = "";
@@ -80,6 +100,24 @@ function encodeAssetPath(raw: string): string {
     const p = raw.startsWith("/") ? raw : `/${raw}`;
     return `p_${base64UrlEncode(p)}`;
   }
+}
+
+function normalizeGeneratedAssetUrls(input: unknown): string[] {
+  if (!Array.isArray(input)) return [];
+  const out: string[] = [];
+  for (const v of input) {
+    if (typeof v !== "string") continue;
+    const s = v.trim();
+    if (!s || s === "/") continue;
+    try {
+      const u = new URL(s);
+      if (u.pathname === "/" && !u.search && !u.hash) continue;
+    } catch {
+      // Path-style allowed
+    }
+    out.push(s);
+  }
+  return out;
 }
 
 export function createOpenAiStreamFromGrokNdjson(
@@ -221,6 +259,8 @@ export function createOpenAiStreamFromGrokNdjson(
             if (videoResp) {
               const progress = typeof videoResp.progress === "number" ? videoResp.progress : 0;
               const videoUrl = typeof videoResp.videoUrl === "string" ? videoResp.videoUrl : "";
+              const thumbnailUrl =
+                typeof videoResp.thumbnailImageUrl === "string" ? videoResp.thumbnailImageUrl : "";
 
               if (progress > lastVideoProgress) {
                 lastVideoProgress = progress;
@@ -241,7 +281,15 @@ export function createOpenAiStreamFromGrokNdjson(
               if (videoUrl) {
                 const videoPath = encodeAssetPath(videoUrl);
                 const src = toImgProxyUrl(global, origin, videoPath);
-                controller.enqueue(encoder.encode(makeChunk(id, created, currentModel, buildVideoTag(src))));
+                const posterSrc = thumbnailUrl
+                  ? toImgProxyUrl(global, origin, encodeAssetPath(thumbnailUrl))
+                  : "";
+                const html = buildVideoHtml({
+                  videoUrl: src,
+                  posterUrl: posterSrc,
+                  posterPreview: settings.video_poster_preview === true,
+                });
+                controller.enqueue(encoder.encode(makeChunk(id, created, currentModel, html)));
                 // 预热缓存：主动访问视频URL触发缓存写入
                 warmupCache(src, opts.cookie).catch(() => {});
               }
@@ -254,11 +302,10 @@ export function createOpenAiStreamFromGrokNdjson(
             if (isImage) {
               const modelResp = grok.modelResponse;
               if (modelResp) {
-                const urls = Array.isArray(modelResp.generatedImageUrls) ? modelResp.generatedImageUrls : [];
+                const urls = normalizeGeneratedAssetUrls(modelResp.generatedImageUrls);
                 if (urls.length) {
                   const linesOut: string[] = [];
                   for (const u of urls) {
-                    if (typeof u !== "string") continue;
                     const imgPath = encodeAssetPath(u);
                     const imgUrl = toImgProxyUrl(global, origin, imgPath);
                     linesOut.push(imgUrl);
@@ -383,7 +430,16 @@ export async function parseOpenAiFromGrokNdjson(
     if (videoResp?.videoUrl && typeof videoResp.videoUrl === "string") {
       const videoPath = encodeAssetPath(videoResp.videoUrl);
       const src = toImgProxyUrl(global, origin, videoPath);
-      content = buildVideoTag(src);
+      const thumbnailUrl =
+        typeof videoResp.thumbnailImageUrl === "string" ? videoResp.thumbnailImageUrl : "";
+      const posterSrc = thumbnailUrl
+        ? toImgProxyUrl(global, origin, encodeAssetPath(thumbnailUrl))
+        : "";
+      content = buildVideoHtml({
+        videoUrl: src,
+        posterUrl: posterSrc,
+        posterPreview: opts.settings.video_poster_preview === true,
+      });
       model = requestedModel;
       // 预热缓存：主动访问视频URL触发缓存写入
       warmupCache(src, opts.cookie).catch(() => {});
@@ -397,9 +453,8 @@ export async function parseOpenAiFromGrokNdjson(
     if (typeof modelResp.model === "string" && modelResp.model) model = modelResp.model;
     if (typeof modelResp.message === "string") content = modelResp.message;
 
-    const urls = Array.isArray(modelResp.generatedImageUrls) ? modelResp.generatedImageUrls : [];
+    const urls = normalizeGeneratedAssetUrls(modelResp.generatedImageUrls);
     for (const u of urls) {
-      if (typeof u !== "string") continue;
       const imgPath = encodeAssetPath(u);
       const imgUrl = toImgProxyUrl(global, origin, imgPath);
       content += `\n${imgUrl}`;

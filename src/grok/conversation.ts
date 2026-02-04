@@ -7,10 +7,18 @@ export interface OpenAIChatMessage {
   content: string | Array<{ type: string; text?: string; image_url?: { url?: string } }>;
 }
 
+export interface VideoConfig {
+  aspect_ratio?: string;
+  video_length?: number;
+  resolution?: string;
+  preset?: string;
+}
+
 export interface OpenAIChatRequestBody {
   model: string;
   messages: OpenAIChatMessage[];
   stream?: boolean;
+  video_config?: VideoConfig;
 }
 
 export const CONVERSATION_API = "https://grok.com/rest/app-chat/conversations/new";
@@ -53,13 +61,34 @@ export function buildConversationPayload(args: {
   imgUris: string[];
   postId?: string;
   settings: GrokSettings;
+  videoConfig?: VideoConfig | undefined;
 }): { payload: Record<string, unknown>; referer?: string; isVideoModel: boolean } {
-  const { requestModel, content, imgIds, imgUris, postId, settings } = args;
+  const { requestModel, content, imgIds, imgUris, postId, settings, videoConfig } = args;
   const cfg = getModelInfo(requestModel);
   const { grokModel, mode, isVideoModel } = toGrokModel(requestModel);
 
-  if (cfg?.is_video_model && imgUris.length) {
+  let modeFlag = "--mode=custom";
+  if (isVideoModel && typeof videoConfig?.preset === "string") {
+    const preset = videoConfig.preset.toLowerCase();
+    if (preset === "fun") modeFlag = "--mode=extremely-crazy";
+    else if (preset === "normal") modeFlag = "--mode=normal";
+    else if (preset === "spicy") modeFlag = "--mode=extremely-spicy-or-crazy";
+  }
+
+  const responseMetadata = {
+    requestModelDetails: { modelId: grokModel },
+    ...(isVideoModel
+      ? {
+          aspectRatio: videoConfig?.aspect_ratio,
+          videoLength: videoConfig?.video_length,
+          videoResolution: videoConfig?.resolution,
+        }
+      : {}),
+  };
+
+  if (cfg?.is_video_model && (imgUris.length || postId)) {
     const ref = postId ? `https://grok.com/imagine/${postId}` : `https://assets.grok.com/post/${imgUris[0]}`;
+    const prompt = [content, modeFlag].filter(Boolean).join(" ");
     const referer = postId ? `https://grok.com/imagine/${postId}` : undefined;
     return {
       isVideoModel: true,
@@ -67,9 +96,10 @@ export function buildConversationPayload(args: {
       payload: {
         temporary: true,
         modelName: "grok-3",
-        message: `${ref}  ${content} --mode=custom`,
+        message: `${ref}  ${prompt}`.trim(),
         fileAttachments: imgIds,
         toolOverrides: { videoGen: true },
+        responseMetadata,
       },
     };
   }
@@ -95,7 +125,7 @@ export function buildConversationPayload(args: {
       isReasoning: false,
       webpageUrls: [],
       disableTextFollowUps: true,
-      responseMetadata: { requestModelDetails: { modelId: grokModel } },
+      responseMetadata,
       disableMemory: false,
       forceSideBySide: false,
       modelMode: mode,
