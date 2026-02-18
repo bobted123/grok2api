@@ -128,6 +128,11 @@ export function buildConversationPayload(args: {
       responseMetadata,
       disableMemory: false,
       forceSideBySide: false,
+      metadata: {
+        request_metadata: {
+          mode: grokModel,
+        },
+      },
       modelMode: mode,
       isAsyncChat: false,
     },
