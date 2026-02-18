@@ -303,14 +303,22 @@ curl https://你的服务器地址/v1/chat/completions \
 
 | 模型名称               | 计次   | 账户类型      | 图像生成 | 深度思考 | 联网搜索 | 视频生成 |
 |------------------------|--------|--------------|----------|----------|----------|----------|
+| `grok-3`               | 1      | Basic/Super  | ✅       | ❌       | ✅       | ❌       |
+| `grok-3-fast`          | 1      | Basic/Super  | ✅       | ❌       | ✅       | ❌       |
+| `grok-4-mini`          | 1      | Basic/Super  | ✅       | ✅       | ✅       | ❌       |
 | `grok-4`               | 1      | Basic/Super  | ✅       | ✅       | ✅       | ❌       |
-| `grok-4.1-thinking`    | 1      | Basic/Super  | ✅       | ✅       | ✅       | ❌       |
 | `grok-4-fast`          | 1      | Basic/Super  | ✅       | ✅       | ✅       | ❌       |
 | `grok-4-fast-expert`   | 4      | Basic/Super  | ✅       | ✅       | ✅       | ❌       |
 | `grok-4-expert`        | 4      | Basic/Super  | ✅       | ✅       | ✅       | ❌       |
 | `grok-4-heavy`         | 1      | Super        | ✅       | ✅       | ✅       | ❌       |
-| `grok-3-fast`          | 1      | Basic/Super  | ✅       | ❌       | ✅       | ❌       |
+| `grok-4.1`             | 1      | Basic/Super  | ✅       | ✅       | ✅       | ❌       |
+| `grok-4.1-fast`        | 1      | Basic/Super  | ✅       | ✅       | ✅       | ❌       |
+| `grok-4.1-expert`      | 4      | Basic/Super  | ✅       | ✅       | ✅       | ❌       |
+| `grok-4.1-thinking`    | 1      | Basic/Super  | ✅       | ✅       | ✅       | ❌       |
+| `grok-4.20`            | 1      | Basic/Super  | ✅       | ✅       | ✅       | ❌       |
 | `grok-imagine-0.9`     | -      | Basic/Super  | ✅       | ❌       | ❌       | ✅       |
+| `grok-imagine-1.0`     | -      | Basic/Super  | ✅       | ❌       | ❌       | ❌       |
+| `grok-imagine-1.0-video` | -    | Basic/Super  | ✅       | ❌       | ❌       | ✅       |
 
 **配额说明**：
 - **Basic 账号**：80 次 / 20 小时
